@@ -1,0 +1,2 @@
+- How do we deal with defaults? Should we write them to the DB?
+- Doesn't make sense for default and required to exist together? Unless required gets added later?
