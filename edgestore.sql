@@ -1,6 +1,6 @@
 -- MySQL dump 10.13  Distrib 5.5.35, for debian-linux-gnu (x86_64)
 --
--- Host: localhost    Database: edgestore
+-- Host: localhost    Database: datastore
 -- ------------------------------------------------------
 -- Server version	5.5.35-0ubuntu0.12.04.2-log
 

@@ -1,7 +1,7 @@
 import copy
 
-from edgestore.gid import Gid
-from edgestore.query import Query
+from datastore.gid import Gid
+from datastore.query import Query
 
 class Attr(object):
 

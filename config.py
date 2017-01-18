@@ -6,4 +6,4 @@ class config(object):
         '127.0.0.1',
     ]
 
-    DATABASE_NAME = 'edgestore'
+    DATABASE_NAME = 'datastore'

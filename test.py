@@ -1,9 +1,9 @@
 import time
 import siteinit
 
-from lib.edgestore.entity import Entity
-from lib.edgestore.attr import Attr
-from lib.edgestore.data import Data
+from lib.datastore.entity import Entity
+from lib.datastore.attr import Attr
+from lib.datastore.data import Data
 
 class TestUserEntity(Entity):
     email = Attr.Unicode(required=True)

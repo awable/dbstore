@@ -1,9 +1,9 @@
 from itertools import chain
-from lib.edgestore.db import DB
-from lib.edgestore.config import config
+from lib.datastore.db import DB
+from lib.datastore.config import config
 from contextlib import contextmanager
 
-class EdgeStore(object):
+class DataStore(object):
 
     # keep ids in 32 bit range for the time being
     _MAX_COLO_ID = (1 << 32) - 1
@@ -13,9 +13,9 @@ class EdgeStore(object):
 
     @staticmethod
     def getInstance(dbname=config.DATABASE_NAME):
-        instance =  EdgeStore._instances.get(dbname)
+        instance =  DataStore._instances.get(dbname)
         if not instance:
-            instance = EdgeStore(dbname)
+            instance = DataStore(dbname)
         return instance
 
     def __init__(self, dbname):
@@ -95,7 +95,7 @@ class EdgeStore(object):
         db = DB.getInstance(DATABASE_HOSTS[hostindex], self._dbname)
         shard = self._shards.get(db)
         if not shard:
-            shard = self._shards[db] = EdgeStoreShard(db)
+            shard = self._shards[db] = DataStoreShard(db)
         return shard
 
     _addDefinitionSQL = """
@@ -119,7 +119,7 @@ class EdgeStore(object):
     def getDefinitionType(self, name):
         return self.definitionsDB.getOne(self.getDefinitionSQL, name)
 
-class EdgeStoreShard(object):
+class DataStoreShard(object):
 
     def __init__(self, db):
         self._db = db
@@ -182,7 +182,7 @@ class EdgeStoreShard(object):
             revision = self._incrementRevision(edgetype, gid1)
             edgedata = (edgetype, gid1, gid2, revision, encoding, data)
 
-            add_sql = EdgeStoreShard._addOverwriteSQL if overwrite else EdgeStoreShard._addSQL
+            add_sql = DataStoreShard._addOverwriteSQL if overwrite else DataStoreShard._addSQL
             self._db.run(add_sql, edgedata)
 
             affected_rows = self._db.getAffectedRows()
@@ -200,13 +200,13 @@ class EdgeStoreShard(object):
 
                 # if the edge already existed, delete old indices
                 if affected_rows == 2:
-                    self._db.run(EdgeStoreShard._deleteIndexSQL, (indextype, gid1, prev_revision))
+                    self._db.run(DataStoreShard._deleteIndexSQL, (indextype, gid1, prev_revision))
 
                 if unique:
-                    count = self._db.run(EdgeStoreShard._uniqueIndexSQL, (indextype, indexvalue))
+                    count = self._db.run(DataStoreShard._uniqueIndexSQL, (indextype, indexvalue))
                     assert not count, "edge violates index uniqueness"
 
-                self._db.run(EdgeStoreShard._addIndexSQL, (indextype, indexvalue, gid1, revision))
+                self._db.run(DataStoreShard._addIndexSQL, (indextype, indexvalue, gid1, revision))
 
             return edgedata
 
@@ -225,12 +225,12 @@ class EdgeStoreShard(object):
 
             # increment revision since we are making a change
             self._incrementRevision(edgetype, gid1)
-            self._db.run(EdgeStoreShard._deleteSQL, (edgetype, gid1, gid2))
+            self._db.run(DataStoreShard._deleteSQL, (edgetype, gid1, gid2))
             affected_rows = self._db.getAffectedRows()
 
             # _mysql API doesn't update insertid on DELETE statements so we
             # explicitly fetch the LAST_INSERT_ID()
-            del_revision = self._db.getOne(EdgeStoreShard._lastInsertIDSQL)[0]
+            del_revision = self._db.getOne(DataStoreShard._lastInsertIDSQL)[0]
 
             # decrement edge count and remove old indices if we actually deleted something
             if affected_rows:
@@ -238,7 +238,7 @@ class EdgeStoreShard(object):
 
                 assert del_revision, "missing revision for deleted edge"
                 for indextype in indextypes:
-                    self._db.run(EdgeStoreShard._deleteIndexSQL, (indextype, gid1, del_revision))
+                    self._db.run(DataStoreShard._deleteIndexSQL, (indextype, gid1, del_revision))
 
             return (affected_rows == 1)
 
@@ -269,15 +269,15 @@ class EdgeStoreShard(object):
 
     def query(self, edge_type, index, gid1=None):
         if gid1 and not index:
-            query = EdgeStoreShard._listSQL
+            query = DataStoreShard._listSQL
             args = (edge_type, gid1)
         elif gid1:
             indextype, indexstart, indexend = index
-            query = EdgeStoreShard._searchIndexSQL.format('%s')
+            query = DataStoreShard._searchIndexSQL.format('%s')
             args = (edge_type, gid1, indextype, indexstart, indexend)
         else:
             indextype, indexstart, indexend = index
-            query = EdgeStoreShard._searchIndexSQL.format('edgeindex.gid1')
+            query = DataStoreShard._searchIndexSQL.format('edgeindex.gid1')
             args = (edge_type, indextype, indexstart, indexend)
 
         return self._db.get(query, args)
@@ -311,10 +311,10 @@ class EdgeStoreShard(object):
     def get(self, edge_type, gid1, gid2, index=None):
         if indextype:
             indextype, indexstart, indexend = indexrange
-            query = EdgeStoreShard._getIndexSQL
+            query = DataStoreShard._getIndexSQL
             args = (edge_type, gid1, gid2, indextype, indexstart, indexend)
         else:
-            query = EdgeStoreShard._getSQL
+            query = DataStoreShard._getSQL
             args = (edge_type, gid1, gid2)
 
         return self._db.getOne(query, args)
@@ -326,7 +326,7 @@ class EdgeStoreShard(object):
     """
 
     def count(self, edgetype, gid1):
-        row = self._db.getOne(EdgeStoreShard._countSQL, (edgetype, gid1))
+        row = self._db.getOne(DataStoreShard._countSQL, (edgetype, gid1))
         return row[0] if row else 0
 
     def lock(self, colo):
@@ -345,7 +345,7 @@ class EdgeStoreShard(object):
     """
 
     def _incrementRevision(self, edgetype, gid1):
-        self._db.run(EdgeStoreShard._incrementRevisionSQL, (edgetype, gid1))
+        self._db.run(DataStoreShard._incrementRevisionSQL, (edgetype, gid1))
         return self._db.getLastInsertID()
 
     _incrementCountSQL = """
@@ -355,4 +355,4 @@ class EdgeStoreShard(object):
     """
 
     def _incrementCount(self, edgetype, gid1, inc=1):
-        self._db.run(EdgeStoreShard._incrementCountSQL, (inc, edgetype, gid1))
+        self._db.run(DataStoreShard._incrementCountSQL, (inc, edgetype, gid1))

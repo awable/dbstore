@@ -3,12 +3,12 @@ import escode
 import contextlib import contextmanager
 from collections import defaultdict
 
-from lib.edgestore.config import DATABASE_NAME
-from lib.edgestore.datametaclass import DataMetaClass
-from lib.edgestore.edgestore import EdgeStore
-from lib.edgestore.events import DataEvents
+from lib.datastore.config import DATABASE_NAME
+from lib.datastore.datametaclass import DataMetaClass
+from lib.datastore.datastore import DataStore
+from lib.datastore.events import DataEvents
 
-EDGESTORE = EdgeStore.getInstance(DATABASE_NAME)
+DATASTORE = DataStore.getInstance(DATABASE_NAME)
 
 class Data(object):
 
@@ -54,7 +54,7 @@ class Data(object):
 
     @classmethod
     def generateGid(cls, colo_gid=None, colo=None):
-        return EDGESTORE.generateGid(colo_gid, colo)
+        return DATASTORE.generateGid(colo_gid, colo)
 
     @classmethod
     def add(cls, gid1, gid2, attrsdict={}, get=False):
@@ -99,7 +99,7 @@ class Data(object):
         if cached: return list(cached)
 
         # fetch list
-        edgedatas = EDGESTORE.query(cls.__edgetype__, index=index, gid1=gid1, colo=colo)
+        edgedatas = DATASTORE.query(cls.__edgetype__, index=index, gid1=gid1, colo=colo)
         instances = [cls._getInstanceFromEdge(edgedata) for edgedata in edgedatas]
 
         # update cache
@@ -119,7 +119,7 @@ class Data(object):
         if cached: return cached
 
         # get instance
-        edgedata = EDGESTORE.get(cls.__edgetype__, gid1, gid2)
+        edgedata = DATASTORE.get(cls.__edgetype__, gid1, gid2)
         instance = cls._getInstanceFromEdge(edgedata) if edgedata else None
 
         # update cache
@@ -137,7 +137,7 @@ class Data(object):
         if cached: return cached
 
         # get count
-        count = EDGESTORE.count(cls.__edgetype__, gid1)
+        count = DATASTORE.count(cls.__edgetype__, gid1)
 
         # update cache
         cls._setQueryCache(gid1, '__count__', count)
@@ -213,8 +213,8 @@ class Data(object):
         overwrite = bool(self.__revision__)
 
         # add the edge and save whether it was an overwrite
-        edgedata = EDGESTORE.add(self.__edgetype__, gid1, gid2, encoding, data, indices, overwrite)
-        cls.lastAddWasOverwrite = EDGESTORE.lastAddWasOverwrite
+        edgedata = DATASTORE.add(self.__edgetype__, gid1, gid2, encoding, data, indices, overwrite)
+        cls.lastAddWasOverwrite = DATASTORE.lastAddWasOverwrite
 
         # set the updated revision
         order, revision, edgetype, gid1, gid2, encoding, data = edgedata
@@ -257,7 +257,7 @@ class Data(object):
         return index.range(equal_args, arg_start, arg_end)
 
     def _delete(self):
-        return EDGESTORE.delete(self.__edgetype__, self.__gid1__, self.__gid2__)
+        return DATASTORE.delete(self.__edgetype__, self.__gid1__, self.__gid2__)
 
     def __new__(cls, gid1, gid2, attrsdict=None):
         assert gid1 and gid2, "cannot create instance without a parent or child defined"
@@ -329,7 +329,7 @@ class Data(object):
 
     @classmethod
     def colo(cls, gid):
-        return EDGESTORE.colo(gid)
+        return DATASTORE.colo(gid)
 
     @staticmethod
     def isLocked(colo):
@@ -378,7 +378,7 @@ class Data(object):
 
         try:
 
-            with contextlib.nested(map(EDGESTORE.lock, sorted(Data._lockedColos))):
+            with contextlib.nested(map(DATASTORE.lock, sorted(Data._lockedColos))):
                 # all updates, adds and deletes will be stored in
                 # dirty_instances and delete_instances
                 yield

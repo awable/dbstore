@@ -1,7 +1,7 @@
 import escode
 
 from itertools import product
-from edgestore.query import Query
+from datastore.query import Query
 
 class Index(object):
 

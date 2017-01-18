@@ -1,20 +1,20 @@
 import copy
 
-from lib.edgestore.config import DATABASE_NAME
-from lib.edgestore.edgestore import EdgeStore
-from lib.edgestore.attr import Attr
+from lib.datastore.config import DATABASE_NAME
+from lib.datastore.datastore import DataStore
+from lib.datastore.attr import Attr
 
 _DEFINITIONS_EDGETYPE = 1
 _DEFINITIONS_INDEXTYPE = 1
 _DEFINITIONS_GID = 1
 
-EDGESTORE = EdgeStore.getInstance(DATABASE_NAME)
+DATASTORE = DataStore.getInstance(DATABASE_NAME)
 
 class DataMetaClass(type):
 
     def __new__(cls, name, parents, attrs):
         class_origname = attrs.get('__origname__', name)
-        edgetype = EDGESTORE.addOrGetDefinitionType(class_origname)
+        edgetype = DATASTORE.addOrGetDefinitionType(class_origname)
         assert edgetype not in DataMetaClass._dataClasses, "duplicate class `%s`" % class_origname
 
         cls_parents = filter(lambda parent: isinstance(parent, cls), parents)
@@ -66,7 +66,7 @@ class DataMetaClass(type):
                 for index in attrdef:
                     assert all(adef in attrdefsdict for adef in index.attrdefs), "invalid index def"
                     indexname = '{}:{}'.format(name, ':'.join(adef.name for adef in index.attrdefs))
-                    index.indextype = EDGESTORE.addOrGetDefinitionType(indexname)
+                    index.indextype = DATASTORE.addOrGetDefinitionType(indexname)
 
 
         attrs['__gid1attrname__'] = gid1attrname

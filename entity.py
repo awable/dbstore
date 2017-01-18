@@ -1,6 +1,6 @@
-from lib.edgestore.data import Data
-from lib.edgestore.attr import Attr
-from lib.edgestore.datametaclass import DataMetaClass
+from lib.datastore.data import Data
+from lib.datastore.attr import Attr
+from lib.datastore.datametaclass import DataMetaClass
 
 class Entity(Data):
 
