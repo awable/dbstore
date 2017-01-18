@@ -1,6 +1,8 @@
+import random
+
 from itertools import chain
-from lib.datastore.db import DB
-from lib.datastore.config import config
+from db import DB
+from config import config
 from contextlib import contextmanager
 
 class DataStore(object):
@@ -89,10 +91,10 @@ class DataStore(object):
         return self._getColoShard(self.colo(gid))
 
     def _getColoShard(self, colo):
-        return self._getHostShard(colo % self.NUM_HOSTS)
+        return self._getHostShard(colo % self._NUM_HOSTS)
 
     def _getHostShard(self, hostindex):
-        db = DB.getInstance(DATABASE_HOSTS[hostindex], self._dbname)
+        db = DB.getInstance(config.DATABASE_HOSTS[hostindex], self._dbname)
         shard = self._shards.get(db)
         if not shard:
             shard = self._shards[db] = DataStoreShard(db)
@@ -101,7 +103,7 @@ class DataStore(object):
     _addDefinitionSQL = """
         INSERT INTO definitions
         (`name`, `typeid`)
-        VALUES (%s, NULL)"
+        VALUES (%s, NULL)
         ON DUPLICATE KEY
         UPDATE typeid = LAST_INSERT_ID(typeid)
     """
@@ -113,7 +115,7 @@ class DataStore(object):
     """
 
     def addOrGetDefinitionType(self, name):
-        self.definitionsDB.run(self._addDefinitionSQL, name)
+        self.definitionsDB.run(self._addDefinitionSQL, (name,))
         return self.definitionsDB.getLastInsertID()
 
     def getDefinitionType(self, name):
@@ -125,7 +127,6 @@ class DataStoreShard(object):
         self._db = db
         self.lastAddWasOverwrite = False
 
-
     _generateGidSQL = """
        INSERT INTO colo
        (`colo`, `counter`)
@@ -135,19 +136,19 @@ class DataStoreShard(object):
     """
 
     def generateGid(self, colo, start=1):
-        self._db.run(_generateGidSQL, colo, start)
+        self._db.run(self._generateGidSQL, (colo, start))
         return (colo << 32) + self._db.getLastInsertID()
 
     _addSQL = """
       INSERT INTO edgedata
-      (edgetype, gid1, gid2, revision, encoding, data)
-      VALUES (%s, %s, %s, LAST_INSERT_ID(%s), %s, %s)
+      (edgetype, revision, gid1, gid2, encoding, data)
+      VALUES (%s, LAST_INSERT_ID(%s), %s, %s, %s, %s)
     """
 
     _addOverwriteSQL = """
       INSERT INTO edgedata
-      (edgetype, gid1, gid2, revision, encoding, data)
-      VALUES (%s, %s, %s, LAST_INSERT_ID(%s), %s, %s)
+      (edgetype, revision, gid1, gid2, encoding, data)
+      VALUES (%s, LAST_INSERT_ID(%s), %s, %s, %s, %s)
       ON DUPLICATE KEY
       UPDATE data = VALUES(data),
          revision = LAST_INSERT_ID(revision),
@@ -180,10 +181,11 @@ class DataStoreShard(object):
 
             # get new revision
             revision = self._incrementRevision(edgetype, gid1)
-            edgedata = (edgetype, gid1, gid2, revision, encoding, data)
+            edgedata = (edgetype, 0, revision, gid1, gid2, encoding, data)
+            edgeargs = (edgetype, revision, gid1, gid2, encoding, data)
 
             add_sql = DataStoreShard._addOverwriteSQL if overwrite else DataStoreShard._addSQL
-            self._db.run(add_sql, edgedata)
+            self._db.run(add_sql, edgeargs)
 
             affected_rows = self._db.getAffectedRows()
             prev_revision = self._db.getLastInsertID()
@@ -244,16 +246,16 @@ class DataStoreShard(object):
 
 
     _listSQL = """
-      SELECT '', revision, edgetype, gid1, gid2, encoding, data
+      SELECT edgetype, 0, revision, gid1, gid2, encoding, data
       FROM edgedata
       WHERE edgetype = %s AND gid1 = %s
       ORDER BY revision DESC
     """
 
     _querySQL = """
-      SELECT edgeindex.indexvalue
+      SELECT edgedata.edgetype,
+             edgeindex.indexvalue
              edgedata.revision,
-             edgedata.edgetype,
              edgedata.gid1,
              edgedata.gid2,
              edgedata.encoding,
@@ -283,7 +285,7 @@ class DataStoreShard(object):
         return self._db.get(query, args)
 
     _getSQL = """
-      SELECT revision, '', edgetype, gid1, gid2, revision, encoding, data
+      SELECT edgetype, '', revision, gid1, gid2, encoding, data
       FROM edgedata
       WHERE edgetype = %s
         AND gid1 = %s
@@ -291,9 +293,9 @@ class DataStoreShard(object):
     """
 
     _getIndexSQL = """
-      SELECT edgeindex.indexvalue
+      SELECT edgedata.edgetype,
+             edgeindex.indexvalue
              edgedata.revision,
-             edgedata.edgetype,
              edgedata.gid1,
              edgedata.gid2,
              edgedata.encoding,
@@ -309,14 +311,14 @@ class DataStoreShard(object):
     """
 
     def get(self, edge_type, gid1, gid2, index=None):
-        if indextype:
+        if index:
             indextype, indexstart, indexend = indexrange
             query = DataStoreShard._getIndexSQL
             args = (edge_type, gid1, gid2, indextype, indexstart, indexend)
         else:
             query = DataStoreShard._getSQL
             args = (edge_type, gid1, gid2)
-
+        print 'GET'
         return self._db.getOne(query, args)
 
 

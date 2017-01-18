@@ -1,6 +1,6 @@
-from lib.datastore.data import Data
-from lib.datastore.attr import Attr
-from lib.datastore.datametaclass import DataMetaClass
+from data import Data
+from attr import Attr
+from datametaclass import DataMetaClass
 
 class Entity(Data):
 
@@ -15,10 +15,10 @@ class Entity(Data):
         return colo_gid
 
     @classmethod
-    def add(cls, gid=None, attrs={}):
-        gid = gid or Gid.generate(colo_gid=cls.getColoGid(attrs))
-        with Data.lock(cls.lock_key(gid)):
-            return super(Entity, cls).add(gid, gid, attrs=attrs)
+    def add(cls, gid=None, **attrs):
+        gid = gid or Data.generateGid(colo_gid=cls.getColoGid(attrs))
+        with Data.lock(gid):
+            return super(Entity, cls).add(gid, gid, **attrs)
 
     @classmethod
     def delete(cls, gid):
@@ -26,8 +26,3 @@ class Entity(Data):
 
     def remove(self):
         return self.delete(self.gid)
-
-    @classmethod
-    def get(cls, gid, gid2=None):
-        result = super(Entity, cls).list(gid)
-        return result[0] if result else None

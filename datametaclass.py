@@ -1,16 +1,18 @@
 import copy
 
-from lib.datastore.config import DATABASE_NAME
-from lib.datastore.datastore import DataStore
-from lib.datastore.attr import Attr
+from datastore import DataStore
+from attr import Attr
 
 _DEFINITIONS_EDGETYPE = 1
 _DEFINITIONS_INDEXTYPE = 1
 _DEFINITIONS_GID = 1
 
-DATASTORE = DataStore.getInstance(DATABASE_NAME)
+DATASTORE = DataStore.getInstance()
 
 class DataMetaClass(type):
+
+    _dataClasses = {}
+    _disallowedAttrNames = ['get', 'gid1', 'gid2']
 
     def __new__(cls, name, parents, attrs):
         class_origname = attrs.get('__origname__', name)
@@ -35,6 +37,11 @@ class DataMetaClass(type):
         for attr_name, attr_def in attrs.items():
 
             if isinstance(attr_def, Attr):
+
+                assert attr_name not in DataMetaClass._disallowedAttrNames, "disallowed attr name"
+
+                # remove class attribute to avoid conflict with instance
+                del attrs[attr_name]
 
                 if isinstance(attr_def, Attr.ParentGid):
                     assert gid1attrname is None, "redefined parent gid"
@@ -75,10 +82,17 @@ class DataMetaClass(type):
         attrs['__cologidattrname__'] = cologidattrname
         attrs['__keyattrname__'] = keyattrname
         attrs['__attrdefs__'] = attrdefsdict
+        attrs['__index__'] = attrs.get('__index__', [])
 
         data_class = super(DataMetaClass, cls).__new__(cls, name, parents, attrs)
         DataMetaClass._dataClasses[edgetype] = data_class
         return data_class
+
+    def __getattr__(self, attr_name):
+        if attr_name in self.__attrdefs__:
+            return self.__attrdefs__[attr_name]
+
+        raise AttributeError('%r has no attr `%s`' %  (self.__class__, attr_name))
 
     @staticmethod
     def getDataClass(gid):

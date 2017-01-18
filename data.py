@@ -1,14 +1,13 @@
 import escode
+import contextlib
 
-import contextlib import contextmanager
 from collections import defaultdict
 
-from lib.datastore.config import DATABASE_NAME
-from lib.datastore.datametaclass import DataMetaClass
-from lib.datastore.datastore import DataStore
-from lib.datastore.events import DataEvents
+from datametaclass import DataMetaClass
+from datastore import DataStore
+from events import DataEvents
 
-DATASTORE = DataStore.getInstance(DATABASE_NAME)
+DATASTORE = DataStore.getInstance()
 
 class Data(object):
 
@@ -57,14 +56,15 @@ class Data(object):
         return DATASTORE.generateGid(colo_gid, colo)
 
     @classmethod
-    def add(cls, gid1, gid2, attrsdict={}, get=False):
+    def add(cls, gid1, gid2, **attrs):
         assert gid1 and gid2, "parent_gid(%d) or child_gid(%d) missing" % (gid1, gid2)
         colo = cls.checkLock(gid1, required=True)
         instance = cls.get(gid1, gid2)
+        get = attrs.pop('get', False)
         assert not instance or get, "duplicate instance (%s,%s,%s)" % (cls, gid1, gid2)
 
         if not instance:
-            instance = cls(gid1, gid2, attrsdict)
+            instance = cls.instance(gid1, gid2, attrs)
             instance._markDirty()
 
         return instance
@@ -217,7 +217,7 @@ class Data(object):
         cls.lastAddWasOverwrite = DATASTORE.lastAddWasOverwrite
 
         # set the updated revision
-        order, revision, edgetype, gid1, gid2, encoding, data = edgedata
+        edgetype, order, revision, gid1, gid2, encoding, data = edgedata
         self.__revision__ = revision
 
         # clear all cached queries that might include this instance
@@ -259,7 +259,8 @@ class Data(object):
     def _delete(self):
         return DATASTORE.delete(self.__edgetype__, self.__gid1__, self.__gid2__)
 
-    def __new__(cls, gid1, gid2, attrsdict=None):
+    @classmethod
+    def instance(cls, gid1, gid2, attrsdict=None):
         assert gid1 and gid2, "cannot create instance without a parent or child defined"
 
         # check if the instance is cached
@@ -268,13 +269,13 @@ class Data(object):
 
         # create a new instance if one isn't in the instance cache
         if not instance:
-            instance = super(Data, cls).__new__(cls, gid1, gid2, attrsdict)
+            instance = cls(gid1, gid2, attrsdict)
             Data._instanceCache[instance_key] = instance
 
         # set the instance as locked if accessed under a lock
-        if cls.isLocked(gid1):
+        if cls.isLocked(cls.colo(gid1)):
             instance.__locked__ = True
-            cls._lockedInstances[cls.colo(gid1)].add(instance)
+            cls._lockedInstances.add(instance)
 
         # set instance attributes if necessary
         if attrsdict:
@@ -296,8 +297,8 @@ class Data(object):
 
     @classmethod
     def _getInstanceFromEdge(cls, edgedata):
-        order, revision, edgetype, gid1, gid2, encoding, data = edgedata
-        instance = cls(gid1, gid2, None)
+        edgetype, order, revision, gid1, gid2, encoding, data = edgedata
+        instance = cls.instance(gid1, gid2, None)
 
         # update the instance if we don't have the most recent revision
         if instance.__revision__ < revision:
@@ -305,8 +306,8 @@ class Data(object):
             rawdata = encoder.decode(data)
 
             datadict = {
-                attrname: self.attrdef._from_base_type(rawdata.get(attrname))
-                for attrname, attrdef in self.__attrdefs__.iteritems()}
+                attrname: attrdef._from_base_type(rawdata.get(attrname))
+                for attrname, attrdef in cls.__attrdefs__.iteritems()}
 
             instance.__datadict__ = instance.__committeddatadict__ = datadict
             instance.__revision__ = instance.__committedrevision__ = revision
@@ -352,7 +353,7 @@ class Data(object):
     @contextlib.contextmanager
     def lock(gids=[]):
 
-        colos = set(map(Data.colo, gids))
+        colos = set(map(Data.colo, gids if isinstance(gids, list) else [gids]))
 
         # empty lock waits for the first non empty lock
         if not colos:
@@ -378,7 +379,7 @@ class Data(object):
 
         try:
 
-            with contextlib.nested(map(DATASTORE.lock, sorted(Data._lockedColos))):
+            with contextlib.nested(*map(DATASTORE.lock, sorted(Data._lockedColos))):
                 # all updates, adds and deletes will be stored in
                 # dirty_instances and delete_instances
                 yield

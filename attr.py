@@ -1,7 +1,7 @@
 import copy
+import datetime
 
-from datastore.gid import Gid
-from datastore.query import Query
+from query import Query
 
 class Attr(object):
 
@@ -14,11 +14,11 @@ class Attr(object):
         clsname = self.__class__.__name__
         assert self.ALLOW_REQUIRED or not required, "{} cannot have required".format(clsname)
         assert self.ALLOW_DEFAULT or not default, "{} cannot have default".format(clsname)
-        assert not (required and default), "required attr cannot have default"
+        assert not required or default is None, "required attr cannot have default"
 
-        self.name = None
+        self.name = None # filled in by DataMetaClass
         self.required = self.ALWAYS_REQUIRED or required
-        self.default = self.setter(default)
+        self.default = self.validate(default) if default is not None else default
 
     def getter(self, value):
         return value if value is not None else copy.copy(self.default)
@@ -74,7 +74,7 @@ class AttrComputed(Attr):
         assert False, "Cannot set AttrComputed"
 
 def _castif(vtype, value):
-    value if type(value) is vtype else vtype(value)
+    return value if type(value) is vtype else vtype(value)
 
 class AttrBool(Attr):
     def _validate(self, value):
@@ -100,7 +100,7 @@ class AttrRepeated(Attr):
     def __init__(self, attrtype):
         assert issubclass(attrtype, Attr), "need element attr type for AttrRepeated"
         self.elem = attrtype(required=False)
-        super(AttrList, self).__init__(required=False, default=[])
+        super(AttrRepeated, self).__init__(required=False, default=[])
 
     def _validate(self, value):
         return tuple(map(self.elem.validate, value))
@@ -120,16 +120,16 @@ class AttrDateTime(Attr):
     _EPOCH = datetime.datetime.utcfromtimestamp(0)
 
     def _validate(self, value):
-        assert isinstance(value, datetime.datetime) and value.tzinfo, "Require UTC datetime object"
+        assert isinstance(value, datetime.datetime) and not value.tzinfo, "Require UTC datetime obj"
         return value
 
     def _to_base_type(self, value):
-        delta = value - _EPOCH
+        delta = value - self._EPOCH
         return delta.microseconds + 1000000 * (delta.seconds + 24 * 3600 * delta.days)
 
     def _from_base_type(self, value):
         if value is None: return None
-        return _EPOCH + datetime.timedelta(microseconds=value)
+        return self._EPOCH + datetime.timedelta(microseconds=value)
 
 class AttrGid(AttrInt):
     pass
@@ -154,7 +154,8 @@ Attr.Int = AttrInt
 Attr.Float = AttrFloat
 Attr.String = AttrString
 Attr.Unicode = AttrUnicode
-Attr.List = AttrList
+Attr.Repeated = AttrRepeated
+Attr.DateTime = AttrDateTime
 Attr.Dict = AttrDict
 Attr.Gid = AttrGid
 Attr.ParentGid = AttrParentGid
