@@ -1,18 +1,18 @@
 from itertools import chain
 from lib.edgestore.db import DB
-from lib.edgestore.config import DATABASE_HOSTS
+from lib.edgestore.config import config
 from contextlib import contextmanager
 
 class EdgeStore(object):
 
     # keep ids in 32 bit range for the time being
     _MAX_COLO_ID = (1 << 32) - 1
-    _NUM_HOSTS = len(DATABASE_HOSTS)
+    _NUM_HOSTS = len(config.DATABASE_HOSTS)
 
     _instances = {}
 
     @staticmethod
-    def getInstance(dbname='edgestore'):
+    def getInstance(dbname=config.DATABASE_NAME):
         instance =  EdgeStore._instances.get(dbname)
         if not instance:
             instance = EdgeStore(dbname)
@@ -23,6 +23,7 @@ class EdgeStore(object):
         self._shards = {}
         self._locked_colos = set()
         self.lastAddWasOverwrite = False
+        self.definitionsDB = DB.getInstance(config.DEFINITIONS_HOST, self._dbname)
 
     def colo(self, gid):
         return gid >> 32
@@ -49,14 +50,16 @@ class EdgeStore(object):
 
         if colo or gid1:
             colo = colo or self.colo(gid1)
-            return self._getColoShard(colo).query(edgetype, indextype, indexrange, gid1)
+            return self._getColoShard(colo).query(edgetype, index, gid1)
 
-        return list(chain.from_iterable([
-            self._getHostShard(hostindex).query(edgetype, indextype, indexrange, None)
-            for hostindex in range(self._NUM_HOSTS)]))
+        results = [
+            self._getHostShard(hostindex).query(edgetype, index, None)
+            for hostindex in range(self._NUM_HOSTS)]
+
+        return list(headpq.merge(*results))
 
     def get(self, edgetype, gid1, gid2, index=None):
-        return self._getShard(gid1).get(edgetype, gid1, gid2, indextype, indexrange)
+        return self._getShard(gid1).get(edgetype, gid1, gid2, index)
 
     def count(self, edgetype, gid1):
         return self._getShard(gid1).count(edgetype, gid1)
@@ -94,6 +97,27 @@ class EdgeStore(object):
         if not shard:
             shard = self._shards[db] = EdgeStoreShard(db)
         return shard
+
+    _addDefinitionSQL = """
+        INSERT INTO definitions
+        (`name`, `typeid`)
+        VALUES (%s, NULL)"
+        ON DUPLICATE KEY
+        UPDATE typeid = LAST_INSERT_ID(typeid)
+    """
+
+    _getDefinitionSQL = """
+        SELECT typeid
+        FROM definitions
+        WHERE `name` = %s
+    """
+
+    def addOrGetDefinitionType(self, name):
+        self.definitionsDB.run(self._addDefinitionSQL, name)
+        return self.definitionsDB.getLastInsertID()
+
+    def getDefinitionType(self, name):
+        return self.definitionsDB.getOne(self.getDefinitionSQL, name)
 
 class EdgeStoreShard(object):
 
@@ -220,62 +244,46 @@ class EdgeStoreShard(object):
 
 
     _listSQL = """
-      SELECT edgetype, gid1, gid2, revision, encoding, data
+      SELECT '', revision, edgetype, gid1, gid2, encoding, data
       FROM edgedata
-      WHERE edgetype = %s
-        AND gid1 = %s
+      WHERE edgetype = %s AND gid1 = %s
       ORDER BY revision DESC
     """
 
-    _listIndexSQL = """
-      SELECT edgedata.edgetype,
+    _querySQL = """
+      SELECT edgeindex.indexvalue
+             edgedata.revision,
+             edgedata.edgetype,
              edgedata.gid1,
              edgedata.gid2,
-             edgedata.revision,
              edgedata.encoding,
              edgedata.data
       FROM edgeindex STRAIGHT_JOIN edgedata
       ON (edgedata.edgetype = %s
-        AND edgedata.gid1 = %s
-        AND edgedata.revision = edgeindex.revision)
-      WHERE edgeindex.indextype = %s
-        AND edgeindex.indexvalue BETWEEN %s AND %s
-      ORDER BY edgeindex.indexvalue, edgeindex.revision DESC
-    """
-
-    _searchIndexSQL = """
-      SELECT edgedata.edgetype,
-             edgedata.gid1,
-             edgedata.gid2,
-             edgedata.revision,
-             edgedata.encoding,
-             edgedata.data
-      FROM edgeindex STRAIGHT_JOIN edgedata
-      ON (edgedata.edgetype = %s
-        AND edgedata.gid1 = edgeindex.gid1
+        AND edgedata.gid1 = {}
         AND edgedata.revision = edgeindex.revision)
       WHERE edgeindex.indextype = %s
         AND edgeindex.indexvalue BETWEEN %s and %s
       ORDER BY edgeindex.indexvalue, edgeindex.revision DESC
     """
 
-    def query(self, edge_type, indextype, indexrange, gid1=None):
-        if gid1 and indextype:
-            indexstart, indexend = indexrange
-            query = EdgeStoreShard._listIndexSQL
-            args = (edge_type, gid1, indextype, indexstart, indexend)
-        elif gid1:
+    def query(self, edge_type, index, gid1=None):
+        if gid1 and not index:
             query = EdgeStoreShard._listSQL
             args = (edge_type, gid1)
+        elif gid1:
+            indextype, indexstart, indexend = index
+            query = EdgeStoreShard._searchIndexSQL.format('%s')
+            args = (edge_type, gid1, indextype, indexstart, indexend)
         else:
-            indexstart, indexend = indexrange
-            query = EdgeStoreShard._searchIndexSQL
+            indextype, indexstart, indexend = index
+            query = EdgeStoreShard._searchIndexSQL.format('edgeindex.gid1')
             args = (edge_type, indextype, indexstart, indexend)
 
         return self._db.get(query, args)
 
     _getSQL = """
-      SELECT edgetype, gid1, gid2, revision, encoding, data
+      SELECT revision, '', edgetype, gid1, gid2, revision, encoding, data
       FROM edgedata
       WHERE edgetype = %s
         AND gid1 = %s
@@ -283,12 +291,13 @@ class EdgeStoreShard(object):
     """
 
     _getIndexSQL = """
-      SELECT edgedata.edgetype,
+      SELECT edgeindex.indexvalue
+             edgedata.revision,
+             edgedata.edgetype,
              edgedata.gid1,
              edgedata.gid2,
-             edgedata.revision,
              edgedata.encoding,
-             edgedata.data
+             edgedata.data,
       FROM edgeindex
       STRAIGHT_JOIN edgedata
       ON (edgedata.edgetype = %s
@@ -299,9 +308,9 @@ class EdgeStoreShard(object):
         AND edgeindex.indexvalue BETWEEN %s AND %s
     """
 
-    def get(self, edge_type, gid1, gid2, indextype=None, indexrange=None):
+    def get(self, edge_type, gid1, gid2, index=None):
         if indextype:
-            indexstart, indexend = indexrange
+            indextype, indexstart, indexend = indexrange
             query = EdgeStoreShard._getIndexSQL
             args = (edge_type, gid1, gid2, indextype, indexstart, indexend)
         else:

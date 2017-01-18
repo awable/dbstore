@@ -8,6 +8,8 @@ class Attr(object):
     ALLOW_REQUIRED = True
     ALLOW_DEFAULT = True
 
+    ALWAYS_REQUIRED = False
+
     def __init__(self, required=False, default=None):
         clsname = self.__class__.__name__
         assert self.ALLOW_REQUIRED or not required, "{} cannot have required".format(clsname)
@@ -15,14 +17,14 @@ class Attr(object):
         assert not (required and default), "required attr cannot have default"
 
         self.name = None
-        self.required = required
+        self.required = self.ALWAYS_REQUIRED or required
         self.default = self.setter(default)
 
     def getter(self, value):
-        return value if value is not None else self.default
+        return value if value is not None else copy.copy(self.default)
 
     def setter(self, value):
-        return self._dovalidate(value)
+        return self.validate(value)
 
     def __eq__(self, value):
         return Query.Part(self, Query.OP_EQ, value)
@@ -45,16 +47,14 @@ class Attr(object):
     def __pos__(self):
         return Query.Part(self, Query.OR_ASC)
 
-    def _dovalidate(self, value):
-        assert not self.required or value is not None, "required `%s` attr missing" % self.name
+    def validate(self, value):
+        assert not self.required or value is not None, "required `%s` cannot be None" % self.name
         if value is not None:
-            updated_value = self._validate(value)
-            if updated_value is not None:
-                value = updated_value
+            value = self._validate(value)
         return value
 
     def _validate(self, value):
-        raise Exception("Cannot instantiate Attr() directly")
+        return value
 
     def _to_base_type(self, value):
         return value
@@ -96,9 +96,20 @@ class AttrUnicode(Attr):
     def _validate(self, value):
         return _castif(unicode, value)
 
-class AttrList(Attr):
+class AttrRepeated(Attr):
+    def __init__(self, attrtype):
+        assert issubclass(attrtype, Attr), "need element attr type for AttrRepeated"
+        self.elem = attrtype(required=False)
+        super(AttrList, self).__init__(required=False, default=[])
+
     def _validate(self, value):
-        return _castif(list, value)
+        return tuple(map(self.elem.validate, value))
+
+    def _from_base_type(self, value):
+        return tuple(map(self.elem._from_base_type, value))
+
+    def _to_base_type(self, value):
+        return map(self.elem._to_base_type, value)
 
 class AttrDict(Attr):
     def _validate(self, value):
@@ -110,6 +121,7 @@ class AttrDateTime(Attr):
 
     def _validate(self, value):
         assert isinstance(value, datetime.datetime) and value.tzinfo, "Require UTC datetime object"
+        return value
 
     def _to_base_type(self, value):
         delta = value - _EPOCH
@@ -120,42 +132,22 @@ class AttrDateTime(Attr):
         return _EPOCH + datetime.timedelta(microseconds=value)
 
 class AttrGid(AttrInt):
-    def __init__(self, *args, **kwargs):
-        self.datacls = kwargs.get('cls')
-        if datacls: del kwargs[cls]
-        super(AttrGid, self).__init__(*args, **kwargs)
-
-    def _validate(self, value):
-        if type(value) in (int, long):
-            return Gid(self.datacls, value)
-        assert isinstance(value, Gid) and self.datacls is value.datacls, "Require int or Gid"
-
-    def _to_base_type(self, value):
-        return value.gid
-
-    def _from_base_type(self, value):
-        if value is None: return None
-        return Gid(self.datacls, value)
-
-class _AttrRequiredGid(AttrGid):
-    def __init__(self, *args, **kwargs):
-        kwargs['required'] = True
-        super(_AttrRequiredGid, self).__init__(*args, **kwargs)
-
-class AttrParentGid(_AttrRequiredGid):
     pass
 
-class AttrChildGid(_AttrRequiredGid):
-    pass
+class AttrParentGid(AttrGid):
+    ALWAYS_REQUIRED = True
 
-class AttrPrimaryGid(_AttrRequiredGid):
-    pass
+class AttrChildGid(AttrGid):
+    ALWAYS_REQUIRED = True
 
-class AttrColoGid(_AttrRequiredGid):
-    pass
+class AttrPrimaryGid(AttrGid):
+    ALWAYS_REQUIRED = True
+
+class AttrColoGid(AttrGid):
+    ALWAYS_REQUIRED = True
 
 class AttrPrimaryKey(AttrString):
-    pass
+    ALWAYS_REQUIRED = True
 
 Attr.Bool = AttrBool
 Attr.Int = AttrInt

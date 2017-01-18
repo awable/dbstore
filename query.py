@@ -1,9 +1,9 @@
 class Query(object):
 
     OP_EQ = 0
-    OP_GT = 1
-    OP_LT = 2
-    OP_GE = 3
+    OP_GE = 1
+    OP_GT = 2
+    OP_LT = 3
     OP_LE = 4
     OR_DESC = 5
     OR_ASC = 6
@@ -12,8 +12,7 @@ class Query(object):
         def __init__(self, attrdef, op, value=None):
             self.attrdef = attrdef
             self.op = op
-            #TODO: SETTER NOT ALLOWED ON COMPUTED VALUE, BUT QUERIES ARE
-            self.value = attrdef.setter(value)
+            self.value = attrdef.validate(value)
 
     def __init__(self, cls, *args):
         self._validateargs(args)

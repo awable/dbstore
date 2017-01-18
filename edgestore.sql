@@ -19,6 +19,17 @@
 -- Table structure for table `colo`
 --
 
+DROP TABLE IF EXISTS `definitions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `definitions` (
+  `name` varbinary(767) NOT NULL DEFAULT '',
+  `typeid` int(11) unsigned NOT NULL AUTO_INCREMENT,
+  PRIMARY KEY (`name`),
+  KEY `typeid` (`typeid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
 DROP TABLE IF EXISTS `colo`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8 */;
