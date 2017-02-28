@@ -198,6 +198,7 @@ class DataStoreShard(object):
                 self.lastAddWasOverwrite = True
                 assert prev_revision == (revision - 1), "data changed during update"
 
+            print indices
             for indextype, indexvalue, unique in indices:
 
                 # if the edge already existed, delete old indices
@@ -205,8 +206,8 @@ class DataStoreShard(object):
                     self._db.run(DataStoreShard._deleteIndexSQL, (indextype, gid1, prev_revision))
 
                 if unique:
-                    count = self._db.run(DataStoreShard._uniqueIndexSQL, (indextype, indexvalue))
-                    assert not count, "edge violates index uniqueness"
+                    count = self._db.getOne(DataStoreShard._uniqueIndexSQL, (indextype, indexvalue))
+                    assert not count[0], "edge violates index uniqueness"
 
                 self._db.run(DataStoreShard._addIndexSQL, (indextype, indexvalue, gid1, revision))
 
@@ -254,7 +255,7 @@ class DataStoreShard(object):
 
     _querySQL = """
       SELECT edgedata.edgetype,
-             edgeindex.indexvalue
+             edgeindex.indexvalue,
              edgedata.revision,
              edgedata.gid1,
              edgedata.gid2,
@@ -275,11 +276,11 @@ class DataStoreShard(object):
             args = (edge_type, gid1)
         elif gid1:
             indextype, indexstart, indexend = index
-            query = DataStoreShard._searchIndexSQL.format('%s')
+            query = DataStoreShard._querySQL.format('%s')
             args = (edge_type, gid1, indextype, indexstart, indexend)
         else:
             indextype, indexstart, indexend = index
-            query = DataStoreShard._searchIndexSQL.format('edgeindex.gid1')
+            query = DataStoreShard._querySQL.format('edgeindex.gid1')
             args = (edge_type, indextype, indexstart, indexend)
 
         return self._db.get(query, args)
@@ -318,7 +319,7 @@ class DataStoreShard(object):
         else:
             query = DataStoreShard._getSQL
             args = (edge_type, gid1, gid2)
-        print 'GET'
+
         return self._db.getOne(query, args)
 
 

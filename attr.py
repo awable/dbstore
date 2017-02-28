@@ -18,40 +18,49 @@ class Attr(object):
 
         self.name = None # filled in by DataMetaClass
         self.required = self.ALWAYS_REQUIRED or required
-        self.default = self.validate(default) if default is not None else default
+        self.default = self._validate(default) if default is not None else default
 
-    def getter(self, value):
-        return value if value is not None else copy.copy(self.default)
+        # nested attributes
+        self.attrdefs = {}
 
-    def setter(self, value):
-        return self.validate(value)
+    def setname(self, name):
+        self.name = name
+
+    def set(self, instance, attrvalue):
+        assert not (self.required and attrvalue is None), "required `%s` cannot be None" % self.name
+        attrvalue = None if attrvalue is None else self._validate(attrvalue)
+        instance.__datadict__[self.name] = attrvalue
+
+    def get(self, instance):
+        attrvalue = instance.__datadict__.get(self.name)
+        return attrvalue if attrvalue is not None else copy.deepcopy(self.default)
+
+    def __getattr__(self, attrname):
+        if attrname in self.attrdefs:
+            return self.attrdefs[attrname]
+
+        raise AttributeError('%s has no attr `%s`' % (self, attrname))
 
     def __eq__(self, value):
-        return Query.Part(self, Query.OP_EQ, value)
+        return Query.Arg(self, Query.OP_EQ, value)
 
     def __gt__(self, value):
-        return Query.Part(self, Query.OP_GT, value)
+        return Query.Arg(self, Query.OP_GT, value)
 
     def __lt__(self, value):
-        return Query.Part(self, Query.OP_LT, value)
+        return Query.Arg(self, Query.OP_LT, value)
 
     def __ge__(self, value):
-        return Query.Part(self, Query.OP_GE, value)
+        return Query.Arg(self, Query.OP_GE, value)
 
     def __le__(self, value):
-        return Query.Part(self, Query.OP_LE, value)
+        return Query.Arg(self, Query.OP_LE, value)
 
     def __neg__(self):
-        return Query.Part(self, Query.OR_DESC)
+        return Query.Arg(self, Query.OR_DESC)
 
     def __pos__(self):
-        return Query.Part(self, Query.OR_ASC)
-
-    def validate(self, value):
-        assert not self.required or value is not None, "required `%s` cannot be None" % self.name
-        if value is not None:
-            value = self._validate(value)
-        return value
+        return Query.Arg(self, Query.OR_ASC)
 
     def _validate(self, value):
         return value
@@ -62,60 +71,108 @@ class Attr(object):
     def _from_base_type(self, value):
         return value
 
-class AttrComputed(Attr):
+class _NestedAttr(Attr):
+
+    def __init__(self, attr, parentattr):
+        self.attr = attr
+        self.parentattr = parentattr
+        self.name = attr.name
+
+    def setname(self, name):
+        self.name = name
+
+    def get(self, instance):
+        instance = self.parentattr.get(instance)
+        if isinstance(instance, tuple):
+            return tuple(self.attr.get(inst) for inst in instance)
+        return self.attr.get(instance)
+
+    def set(self, instance, attrvalue):
+        instance = self.parentattr.get(instance)
+        if isinstance(instance, tuple):
+            raise AttributeError('%s has no method `set`' % self)
+        self.attr.set(instance, attrvalue)
+
+    def __getattr__(self, attrname):
+        return getattr(self.attr, attrname)
+
+class ComputedAttr(Attr):
 
     ALLOW_REQUIRED = False
     ALLOW_DEFAULT = False
 
-    def getter(self, value):
-        return value()
+    def __init__(self, func):
+        super(ComputedAttr, self).__init__()
+        self.func = func
 
-    def setter(self, value):
-        assert False, "Cannot set AttrComputed"
+    def set(self, instance, attrvalue):
+        assert False, "Cannot set ComputedAttr"
+
+    def get(self, instance):
+        return self.func(instance)
 
 def _castif(vtype, value):
     return value if type(value) is vtype else vtype(value)
 
-class AttrBool(Attr):
+class BoolAttr(Attr):
     def _validate(self, value):
         return _castif(bool, value)
 
-class AttrInt(Attr):
+class IntAttr(Attr):
     def _validate(self, value):
         return _castif(int, value)
 
-class AttrFloat(Attr):
+class FloatAttr(Attr):
     def _validate(self, value):
         return _castif(float, value)
 
-class AttrString(Attr):
+class StringAttr(Attr):
     def _validate(self, value):
         return _castif(str, value)
 
-class AttrUnicode(Attr):
+class UnicodeAttr(Attr):
     def _validate(self, value):
         return _castif(unicode, value)
 
-class AttrRepeated(Attr):
-    def __init__(self, attrtype):
-        assert issubclass(attrtype, Attr), "need element attr type for AttrRepeated"
-        self.elem = attrtype(required=False)
-        super(AttrRepeated, self).__init__(required=False, default=[])
+class RepeatedAttr(Attr):
+
+    ALLOWS_REQUIRED = False
+
+    def __init__(self, elemattr, required=False, **kwargs):
+        default = None if required else tuple()
+        super(RepeatedAttr, self).__init__(required=required, default=default, **kwargs)
+
+        assert isinstance(elemattr, Attr), "need element type for RepeatedAttr"
+        self.elemattr = elemattr
+        self.elemattr.name = self.name
+
+        for attrname, attrdef in self.elemattr.attrdefs.iteritems():
+            attrtype = type('NestedAttr', (attrdef.__class__,), dict(_NestedAttr.__dict__))
+            self.attrdefs[attrname] =  attrtype(attrdef, self)
+
+    def setname(self, name):
+        super(RepeatedAttr, self).setname(name)
+        self.elemattr.setname(name)
 
     def _validate(self, value):
-        return tuple(map(self.elem.validate, value))
+        assert isinstance(value, (list, tuple)), "value must be a list/tuple"
+        assert not (self.required and not value), "required `%s` cannot be empty" % self.name
+        return tuple(map(self.elemattr._validate, value))
 
     def _from_base_type(self, value):
-        return tuple(map(self.elem._from_base_type, value))
+        return tuple(map(self.elemattr._from_base_type, value))
 
     def _to_base_type(self, value):
-        return map(self.elem._to_base_type, value)
+        return map(self.elemattr._to_base_type, value)
 
-class AttrDict(Attr):
+    def __getattr__(self, attrname):
+        return getattr(self.elemattr, attrname)
+
+class DictAttr(Attr):
     def _validate(self, value):
         return _castif(dict, value)
 
-class AttrDateTime(Attr):
+class DateTimeAttr(Attr):
 
     _EPOCH = datetime.datetime.utcfromtimestamp(0)
 
@@ -131,35 +188,45 @@ class AttrDateTime(Attr):
         if value is None: return None
         return self._EPOCH + datetime.timedelta(microseconds=value)
 
-class AttrGid(AttrInt):
+class GidAttr(IntAttr):
     pass
 
-class AttrParentGid(AttrGid):
+class LocalGidAttr(GidAttr):
     ALWAYS_REQUIRED = True
 
-class AttrChildGid(AttrGid):
+class RemoteGidAttr(GidAttr):
     ALWAYS_REQUIRED = True
 
-class AttrPrimaryGid(AttrGid):
+class PrimaryGidAttr(LocalGidAttr, RemoteGidAttr):
     ALWAYS_REQUIRED = True
 
-class AttrColoGid(AttrGid):
+class ColoGidAttr(GidAttr):
     ALWAYS_REQUIRED = True
 
-class AttrPrimaryKey(AttrString):
+class PrimaryKeyAttr(StringAttr):
     ALWAYS_REQUIRED = True
 
-Attr.Bool = AttrBool
-Attr.Int = AttrInt
-Attr.Float = AttrFloat
-Attr.String = AttrString
-Attr.Unicode = AttrUnicode
-Attr.Repeated = AttrRepeated
-Attr.DateTime = AttrDateTime
-Attr.Dict = AttrDict
-Attr.Gid = AttrGid
-Attr.ParentGid = AttrParentGid
-Attr.ChildGid = AttrChildGid
-Attr.PrimaryGid = AttrPrimaryGid
-Attr.ColoGid = AttrColoGid
-Attr.PrimaryKey = AttrPrimaryKey
+class LocalDataAttr(Attr):
+
+    def __init__(self, nesteddatacls, **kwargs):
+        super(LocalDataAttr, self).__init__(**kwargs)
+        self.nesteddatacls = nesteddatacls
+
+        for attrname, attrdef in nesteddatacls.__attrdefs__.iteritems():
+            attrtype = type('NestedAttr', (attrdef.__class__,), dict(_NestedAttr.__dict__))
+            self.attrdefs[attrname] =  attrtype(attrdef, self)
+
+    def setname(self, name):
+        super(LocalDataAttr, self).setname(name)
+        for attrdef in self.attrdefs.itervalues():
+            attrdef.setname('{}.{}'.format(name, attrdef.name))
+
+    def _validate(self, value):
+        assert isinstance(value, self.nesteddatacls), "expected %s" % self.nesteddatacls
+        return value
+
+    def _from_base_type(self, value):
+        return self.nesteddatacls(**value)
+
+    def _to_base_type(self, value):
+        return value.dict(validate=True)

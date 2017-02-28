@@ -1,28 +1,53 @@
 import time
 import datetime
+from pprint import pprint
 
-from entity import Entity
-from attr import Attr
-from data import Data
+from . import Data, Entity, KeyEntity, EdgeData, Attr, Index
+
+class Phone(Data):
+    code = IntAttr(required=True)
+    number = IntAttr(required=True)
 
 class TestUserEntity(Entity):
-    email = Attr.Unicode(required=True)
-    password = Attr.Unicode(required=True)
-    dobtime = Attr.DateTime(required=True)
-    jointime = Attr.Int(required=True)
-    counter = Attr.Int(default=0)
+    email = UnicodeAttr(required=True)
+    password = UnicodeAttr(required=True)
+    dobtime = DateTimeAttr(required=True)
+    jointime = IntAttr(required=True)
+    counter = IntAttr(default=0)
+    phone = RepeatedAttr(LocalDataAttr(Phone), required=True)
+
+    __indexdefs__ = [
+        Index(phone.code)]
+
+class TestUserEmailEntity(KeyEntity):
+    email = PrimaryKeyAttr()
+    name = UnicodeAttr(required=True)
+
+class UserEventAssoc(EdgeData):
+    usergid = LocalGidAttr()
+    eventgid = RemoteGidAttr()
+    subscribed = BoolAttr(default=False)
+
+    __indexdefs__ = [
+        Index(usergid, subscribed),
+        Index(subscribed)]
+
 
 def add(gid=None, email='awable@gmail.com'):
-    return TestUserEntity.add(
-        email=email,
-        password='b4llz',
-        dobtime=datetime.datetime(year=1983,month=12,day=14),
-        jointime=2342)
+    # return TestUserEntity.add(
+    #     email=email,
+    #     password='b4llzz',
+    #     dobtime=datetime.datetime(year=1983,month=12,day=17),
+    #     jointime=23422323,
+    #     phone=[Phone(code=1, number=2)])
 
-#add()
+    return TestUserEmailEntity.addbykey(email, name='Akhil')
 
-e = TestUserEntity.get(15647085412931862529, 15647085412931862529)
-print e
-if e: e.debug_print()
-e = TestUserEntity.get(15647085412931862529, 15647085412931862529)
+# pprint(TestUserEntity.__attrdefs__)
 
+# u = TestUserEntity.get(11912401664461504513)
+
+# print TestUserEntity.phone.code.get(u)
+
+u = add()
+pprint(u.dict())

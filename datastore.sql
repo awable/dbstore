@@ -16,7 +16,7 @@
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
 --
--- Table structure for table `colo`
+-- Table structure for table `definitions`
 --
 
 DROP TABLE IF EXISTS `definitions`;
@@ -29,6 +29,10 @@ CREATE TABLE `definitions` (
   KEY `typeid` (`typeid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `colo`
+--
 
 DROP TABLE IF EXISTS `colo`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;

@@ -1,5 +1,4 @@
-from data import Data
+from . import EdgeData
 
-class Assoc(Data):
+class Assoc(EdgeData):
     pass
-
