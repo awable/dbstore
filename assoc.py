@@ -1,4 +1,3 @@
-from . import EdgeData
+from edgedata import EdgeData
 
-class Assoc(EdgeData):
-    pass
+Assoc = EdgeData

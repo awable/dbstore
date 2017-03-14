@@ -198,7 +198,6 @@ class DataStoreShard(object):
                 self.lastAddWasOverwrite = True
                 assert prev_revision == (revision - 1), "data changed during update"
 
-            print indices
             for indextype, indexvalue, unique in indices:
 
                 # if the edge already existed, delete old indices

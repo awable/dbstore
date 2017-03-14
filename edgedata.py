@@ -5,7 +5,7 @@ import contextlib
 from collections import defaultdict
 from utils import first
 from data import DataType, Data
-from attr import Attr
+from attr import *
 from index import Index
 from query import Query
 from datastore import DataStore
@@ -471,6 +471,12 @@ class EdgeData(Data):
             delete_instances.clear()
 
             EdgeData._lockedColos.clear()
+
+    @contextlib.contextmanager
+    def locknload(self):
+        with self.lock(self.__localgid__):
+            self.refresh()
+            yield
 
     def _markDelete(self):
         if not self.__delete__:

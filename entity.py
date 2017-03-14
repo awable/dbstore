@@ -3,7 +3,7 @@ import binascii
 
 from utils import first
 from edgedata import EdgeDataType, EdgeData
-from attr import Attr
+from attr import *
 from index import Index
 
 class EntityType(EdgeDataType):
@@ -86,16 +86,15 @@ class KeyEntity(Entity):
     __metaclass__ = KeyEntityType
 
     @classmethod
-    def add(cls, gid, key, **attrs):
-        assert gid and key, "missing gid or key"
-        assert cls.colo(gid) == cls._key2colo(key), "mismatched gid and key"
-        attrs[cls.__keyattr__.name] = key
-        return super(KeyEntity, cls).add(gid, **attrs)
+    def add(cls, **attrs):
+        keyattrname = cls.__keyattr__.name
+        key = attrs.pop(keyattrname)
+        return cls.addbykey(key, **attrs)
 
     @classmethod
     def addbykey(cls, key, **attrs):
         assert key, "cannot use empty key"
-        assert not 'gid' in attrs, "cannot include gid in addbykey"
+        assert not attrs.pop('gid', None), "cannot include gid while adding"
 
         get = attrs.pop('get', False)
 
@@ -110,7 +109,7 @@ class KeyEntity(Entity):
 
             if not instance:
                 gid = cls.generateGid(colo=keycolo)
-                instance = cls.add(gid, key, **attrs)
+                instance = super(KeyEntity, cls).add(gid=gid, **attrs)
 
             return instance
 

@@ -111,8 +111,8 @@ class ComputedAttr(Attr):
     def get(self, instance):
         return self.func(instance)
 
-def _castif(vtype, value):
-    return value if type(value) is vtype else vtype(value)
+def _castif(vtype, value, *args, **kwargs):
+    return value if type(value) is vtype else vtype(value, *args, **kwargs)
 
 class BoolAttr(Attr):
     def _validate(self, value):
@@ -132,7 +132,7 @@ class StringAttr(Attr):
 
 class UnicodeAttr(Attr):
     def _validate(self, value):
-        return _castif(unicode, value)
+        return _castif(unicode, value, 'utf-8')
 
 class RepeatedAttr(Attr):
 

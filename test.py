@@ -2,7 +2,11 @@ import time
 import datetime
 from pprint import pprint
 
-from . import Data, Entity, KeyEntity, EdgeData, Attr, Index
+from data import Data
+from entity import Entity, KeyEntity
+from assoc import Assoc
+from attr import *
+from index import Index
 
 class Phone(Data):
     code = IntAttr(required=True)
@@ -23,7 +27,7 @@ class TestUserEmailEntity(KeyEntity):
     email = PrimaryKeyAttr()
     name = UnicodeAttr(required=True)
 
-class UserEventAssoc(EdgeData):
+class UserEventAssoc(Assoc):
     usergid = LocalGidAttr()
     eventgid = RemoteGidAttr()
     subscribed = BoolAttr(default=False)
@@ -33,21 +37,10 @@ class UserEventAssoc(EdgeData):
         Index(subscribed)]
 
 
-def add(gid=None, email='awable@gmail.com'):
-    # return TestUserEntity.add(
-    #     email=email,
-    #     password='b4llzz',
-    #     dobtime=datetime.datetime(year=1983,month=12,day=17),
-    #     jointime=23422323,
-    #     phone=[Phone(code=1, number=2)])
+u = TestUserEmailEntity.add(email='akhilwable@oddbird.org', name='Akhil', get=True)
+pprint(u.dict())
 
-    return TestUserEmailEntity.addbykey(email, name='Akhil')
+with u.locknload():
+    u.name += 'Akhil Wable'
 
-# pprint(TestUserEntity.__attrdefs__)
-
-# u = TestUserEntity.get(11912401664461504513)
-
-# print TestUserEntity.phone.code.get(u)
-
-u = add()
 pprint(u.dict())
