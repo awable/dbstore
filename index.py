@@ -1,6 +1,7 @@
 import escode
 
-from itertools import product
+from collections import Iterable
+from itertools import product, chain
 from attr import Attr
 
 class Index(object):
@@ -16,9 +17,9 @@ class Index(object):
             attrdef._to_base_type(attrdef.get(data_instance))
             for attrdef in self.attrdefs)]
 
-        while any(isinstance(attr, list) for attr in attrtuples[0]):
+        while any(isinstance(attr, Iterable) for attr in attrtuples[0]):
             attrtuples = list(chain.from_iterable((
-                product(*[attr if isinstance(attr, list) else [attr] for attr in attrtuple])
+                product(*[attr if isinstance(attr, Iterable) else [attr] for attr in attrtuple])
                 for attrtuple in attrtuples)))
 
         for attrtuple in attrtuples:
@@ -33,4 +34,4 @@ class Index(object):
             (not self.unique or query.colo) # assures unique indices are restricted to colo
             and (len(equalargs) + len(otherattrs) <= len(self.attrdefs))
             and all(attrsiter.next() in equalargs for idx in range(len(equalargs)))
-            and all(attrsiter.next() == attr for attr in otherattrs))
+            and all(attrsiter.next() is attr for attr in otherattrs))

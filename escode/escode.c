@@ -138,16 +138,18 @@ encode_index(PyObject *object, PyObject *open, strbuf* buf) {
       return 0;
     }
 
+
     uint16_t len = _len & 0xFFFF;
     for (uint16_t idx = 0; idx < len; ++idx) {
+      strbuf_put(buf, "\x00", sizeof(byte));
       if (!encode_index_helper(PyTuple_GetItem(object, idx), buf)) {
         return 0;
       }
+    }
 
-      // skip final \x00 if 'open' and this is the last item
-      if (PyObject_Not(open) || idx < len - 1) {
-        strbuf_put(buf, "\x00", sizeof(byte));
-      }
+    // close the index value with \x00 unless open if true
+    if (PyObject_Not(open)) {
+      strbuf_put(buf, "\x00", sizeof(byte));
     }
 
   } else {

@@ -1,4 +1,5 @@
 import random
+import heapq
 
 from itertools import chain
 from db import DB
@@ -58,7 +59,7 @@ class DataStore(object):
             self._getHostShard(hostindex).query(edgetype, index, None)
             for hostindex in range(self._NUM_HOSTS)]
 
-        return list(headpq.merge(*results))
+        return list(heapq.merge(*results))
 
     def get(self, edgetype, gid1, gid2, index=None):
         return self._getShard(gid1).get(edgetype, gid1, gid2, index)
@@ -160,7 +161,7 @@ class DataStoreShard(object):
     _uniqueIndexSQL = """
       SELECT COUNT(1)
       FROM edgeindex
-      WHERE indextype = %s and indexvalue = %s
+      WHERE indextype = %s and indexvalue = _binary %s
     """
 
     _deleteIndexSQL = """
@@ -173,7 +174,7 @@ class DataStoreShard(object):
     _addIndexSQL = """
       INSERT INTO edgeindex
       (indextype, indexvalue, gid1, revision)
-      VALUES (%s, %s, %s, %s)
+      VALUES (%s, _binary %s, %s, %s)
     """
 
     def add(self, edgetype, gid1, gid2, encoding, data, indices=[], overwrite=False):
@@ -265,7 +266,7 @@ class DataStoreShard(object):
         AND edgedata.gid1 = {}
         AND edgedata.revision = edgeindex.revision)
       WHERE edgeindex.indextype = %s
-        AND edgeindex.indexvalue BETWEEN %s and %s
+        AND edgeindex.indexvalue > _binary %s AND edgeindex.indexvalue < _binary %s
       ORDER BY edgeindex.indexvalue, edgeindex.revision DESC
     """
 
@@ -307,7 +308,7 @@ class DataStoreShard(object):
         AND edgedata.gid2 = %s
         AND edgedata.revision = edgeindex.revision)
       WHERE edgeindex.indextype = %s
-        AND edgeindex.indexvalue BETWEEN %s AND %s
+        AND edgeindex.indexvalue > _binary %s AND edgeindex.indexvalue < _binary %s
     """
 
     def get(self, edge_type, gid1, gid2, index=None):

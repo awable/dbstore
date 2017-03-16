@@ -494,14 +494,14 @@ class EdgeData(Data):
 
     @classmethod
     def _getQueryCache(cls, localgid, query, colo=None):
-        colo = colo or cls.colo(localgid)
+        colo = colo or (localgid and cls.colo(localgid)) or 0
         cache = EdgeData._queryCache[colo][(cls.__edgetype__, localgid)]
         if not EdgeData._queryCacheDisabled and query in cache:
             return cache[query]
 
     @classmethod
     def _setQueryCache(cls, localgid, query, value, colo=None):
-        colo = colo or cls.colo(localgid)
+        colo = colo or (localgid and cls.colo(localgid)) or 0
         EdgeData._queryCache[colo][(cls.__edgetype__, localgid)][query] = value
 
     @classmethod
@@ -517,11 +517,11 @@ class EdgeData(Data):
         EdgeData._queryCache.clear()
 
     def debug_print(self, prefix=''):
-        super(EdgeData, self).debug_print()
         localgidname = self.__localattr__.name
         remotegidname = self.__remoteattr__.name
-        padding = max(len(localgidname), len(remotegidname), 10)
-        format = "%s    %%%ds: %%s" % (prefix, padding)
+        format = "%s: %s"
+        print format % (self.__class__.__name__, id(self))
         print format % (localgidname, getattr(self, localgidname))
         print format % (remotegidname, getattr(self, remotegidname))
         print format % ('_revision', self.__revision__)
+        super(EdgeData, self).debug_print()

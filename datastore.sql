@@ -58,8 +58,8 @@ CREATE TABLE `edgedata` (
   `revision` int(11) unsigned NOT NULL DEFAULT '0',
   `encoding` tinyint(3) unsigned NOT NULL DEFAULT '0',
   `data` blob,
-  PRIMARY KEY (`edgetype`,`gid1`,`gid2`),
-  UNIQUE KEY `revision` (`edgetype`,`gid1`,`revision`)
+  PRIMARY KEY (`edgetype`,`gid1`,`revision`),
+  UNIQUE KEY `edge` (`edgetype`,`gid1`,`gid2`) USING HASH
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 

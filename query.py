@@ -16,7 +16,7 @@ class Query(object):
         def __init__(self, attrdef, op, value=None):
             self.attrdef = attrdef
             self.op = op
-            self.value = attrdef._validate(value)
+            self.value = None if value is None else attrdef._validate(value)
 
     def __init__(self, cls, *args, **kwargs):
         self.colo = kwargs.pop('colo', None)
@@ -61,13 +61,13 @@ class Query(object):
         assert len(self.otherattrs) <= 1, "more than 1 inequality arg"
 
         # extract range query from inequality args, and ensure it is valid
-        arg_start = [arg for arg in self.otherargs if arg.op in (Query.LT, Query.LTE)]
-        arg_end = [arg for arg in self.otherargs if arg.op in (Query.GT, Query.GTE)]
+        arg_start = [arg for arg in self.otherargs if arg.op in (Query.OP_GT, Query.OP_GE)]
+        arg_end = [arg for arg in self.otherargs if arg.op in (Query.OP_LT, Query.OP_LE)]
         assert len(arg_start) <= 1 and len(arg_end) <= 1, "conflicting inequality args"
         self.argstart = first(arg_start)
         self.argend = first(arg_end)
 
-        assert not (self.argstart and self.argend) or self.argstart.value < self.argend.value, \
+        assert not (self.argstart and self.argend) or self.argstart.value <= self.argend.value, \
             "disjoint inequality attr range"
 
         assert first(self.orderattrs) in (None, first(self.otherattrs)), \
@@ -77,12 +77,13 @@ class Query(object):
 
     def order(self, *args):
         assert all(isinstance(arg, Query.Arg) for arg in args), "invalid query arg"
-        assert all(arg.op in (Query,OR_DESC, Query.OR_ASC) for arg in args), "bad query order op"
+        assert all(arg.op in (Query.OR_DESC, Query.OR_ASC) for arg in args), "bad query order op"
         assert all(arg.attrdef not in self.orderattrs for arg in args), "redefined order attr"
-        self.orderags.extend(args)
+        self.orderargs.extend(args)
         self.orderattrs.extend(arg.attrdef for arg in self.orderargs)
 
-        assert first(self.otherattrs) in (None, first(self.orderattrs)), \
+        otherattr = first(self.otherattrs)
+        assert otherattr is None or otherattr is first(self.orderattrs), \
             "first order arg should be same as first inequality arg"
 
         return self
@@ -98,18 +99,20 @@ class Query(object):
         assert indexdef, "no matching index"
 
         attrdefs = (indexdef.attrdefs[idx] for idx in range(len(self.equalargs)))
-        index = [self.equalargs[attrdef].value for attrdef in attrdefs]
+        startvalues = endvalues = tuple(self.equalargs[attrdef].value for attrdef in attrdefs)
         indexstart = indexend = None
 
         if self.argstart:
-            values = tuple(index + [query.argstart.value])
-            indexstart = escode.encode_index(values, query.argstart.op == Query.OP_GE)
+            startvalues = startvalues + (self.argstart.value,)
 
         if self.argend:
-            values = tuple(index + [query.argend.value])
-            indexend = escode.encode_index(values, query.argend.op == Query.OP_LE)
+            endvalues = endvalues + (self.argend.value,)
 
-        if not self.argstart and not self.argend:
-            indexstart = indexend = escode.encode_index(tuple(index))
+        openstart = not self.argstart or (self.argstart.op == Query.OP_GE)
+        indexstart = escode.encode_index(startvalues, openstart)
+
+        openend = not self.argend or (self.argend.op == Query.OP_LE)
+        indexend = escode.encode_index(endvalues, openend)
+        if openend: indexend = indexend + '\x01'
 
         return (indexdef.indextype, indexstart, indexend)

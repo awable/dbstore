@@ -36,11 +36,19 @@ class UserEventAssoc(Assoc):
         Index(usergid, subscribed),
         Index(subscribed)]
 
+# u1 = TestUserEntity.add(
+#     email='awable@gmail.com',
+#     password='1234',
+#     dobtime=datetime.datetime.now(),
+#     jointime=1,
+#     phone=[Phone(code=1,number=1),Phone(code=3,number=3)])
 
-u = TestUserEmailEntity.add(email='akhilwable@oddbird.org', name='Akhil', get=True)
-pprint(u.dict())
+# u2 = TestUserEntity.add(
+#     email='akhilwable@gmail.com',
+#     password='1234',
+#     dobtime=datetime.datetime.now(),
+#     jointime=1,
+#     phone=[Phone(code=2,number=2),Phone(code=4,number=4)])
 
-with u.locknload():
-    u.name += 'Akhil Wable'
-
-pprint(u.dict())
+map(TestUserEntity.debug_print,
+    TestUserEntity.query().fetch())

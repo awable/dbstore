@@ -146,10 +146,6 @@ class RepeatedAttr(Attr):
         self.elemattr = elemattr
         self.elemattr.name = self.name
 
-        for attrname, attrdef in self.elemattr.attrdefs.iteritems():
-            attrtype = type('NestedAttr', (attrdef.__class__,), dict(_NestedAttr.__dict__))
-            self.attrdefs[attrname] =  attrtype(attrdef, self)
-
     def setname(self, name):
         super(RepeatedAttr, self).setname(name)
         self.elemattr.setname(name)
